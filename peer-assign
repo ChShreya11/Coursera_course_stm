@@ -1,0 +1,200 @@
+# 1.tests/factories.py
+
+import factory
+from models import Product  # Import the Product model
+
+class ProductFactory(factory.Factory):
+    class Meta:
+        model = Product
+    
+    name = factory.Faker('word')
+    category = factory.Faker('word')
+    availability = factory.Faker('random_element', elements=['In Stock', 'Out of Stock'])
+
+#2.tests/test_models.py
+
+from models import Product
+
+def test_read_product():
+    product = Product.query.get(1)
+    assert product is not None
+
+def test_update_product():
+    product = Product.query.get(1)
+    product.name = "Updated Product"
+    product.save()
+    assert product.name == "Updated Product"
+
+def test_delete_product():
+    product = Product.query.get(1)
+    product.delete()
+    assert Product.query.get(1) is None
+
+def test_list_all_products():
+    products = Product.query.all()
+    assert len(products) > 0
+
+def test_find_product_by_name():
+    product = Product.query.filter_by(name="Product1").first()
+    assert product is not None
+
+def test_find_product_by_category():
+    product = Product.query.filter_by(category="Category1").first()
+    assert product is not None
+
+def test_find_product_by_availability():
+    product = Product.query.filter_by(availability="In Stock").first()
+    assert product is not None
+
+# 3.tests/test_routes.py
+
+import json
+from app import app
+from models import db, Product
+
+def test_read_product_route():
+    client = app.test_client()
+    response = client.get('/products/1')
+    data = json.loads(response.data)
+    assert data['name'] == "Product1"
+
+def test_update_product_route():
+    client = app.test_client()
+    data = {'name': 'Updated Product', 'category': 'Updated Category', 'availability': 'Out of Stock'}
+    response = client.put('/products/1', data=json.dumps(data), content_type='application/json')
+    data = json.loads(response.data)
+    assert data['name'] == "Updated Product"
+
+def test_delete_product_route():
+    client = app.test_client()
+    response = client.delete('/products/1')
+    assert b'Product deleted' in response.data
+
+def test_list_all_products_route():
+    client = app.test_client()
+    response = client.get('/products')
+    data = json.loads(response.data)
+    assert len(data) > 0
+
+# Implement other route tests for List by Name, List by Category, and List by Availability
+
+# 4.service/routes.py
+from flask import Flask, request, jsonify
+from models import Product  # Import the Product model
+
+app = Flask(__name)
+
+# Sample product data
+products = [
+    {
+        'id': 1,
+        'name': 'Product1',
+        'category': 'Category1',
+        'availability': 'In Stock',
+    },
+    {
+        'id': 2,
+        'name': 'Product2',
+        'category': 'Category2',
+        'availability': 'Out of Stock',
+    }
+]
+
+@app.route('/products/<int:product_id>', methods=['GET'])
+def read_product(product_id):
+    product = next((p for p in products if p['id'] == product_id), None)
+    if product:
+        return jsonify(product), 200
+    return "Product not found", 404
+
+@app.route('/products/<int:product_id>', methods=['PUT'])
+def update_product(product_id):
+    product = next((p for p in products if p['id'] == product_id), None)
+    if product:
+        data = request.get_json()
+        product.update(data)
+        return jsonify(product), 200
+    return "Product not found", 404
+
+@app.route('/products/<int:product_id>', methods=['DELETE'])
+def delete_product(product_id):
+    product = next((p for p in products if p['id'] == product_id), None)
+    if product:
+        products.remove(product)
+        return "Product deleted", 200
+    return "Product not found", 404
+
+@app.route('/products', methods=['GET'])
+def list_all_products():
+    return jsonify(products), 200
+
+if __name__ == '__main__':
+    app.run()
+
+#5. features/steps/load_steps.py
+from behave import given
+from service.routes import products  # Import the products list
+
+@given('I have the following products in the database')
+def load_products(context):
+    data = context.table
+    for row in data:
+        product = {
+            'id': int(row['id']),
+            'name': row['name'],
+            'category': row['category'],
+            'availability': row['availability'],
+        }
+        products.append(product)
+
+# 6.features/products.feature
+
+Feature: Product Management
+
+  Scenario: Read Product
+    Given I have the following products in the database
+      | id | name     | category  | availability |
+      | 1  | Product1 | Category1 | In Stock     |
+    When I request to read product "1"
+    Then the response should contain "Product1"
+    And the response should contain "Category1"
+    And the response should contain "In Stock"
+
+  Scenario: Update Product
+    Given I have the following products in the database
+      | id | name     | category  | availability |
+      | 1  | Product1 | Category1 | In Stock     |
+    When I update product "1" with the following data:
+      | name     | category    | availability |
+      | Updated1 | NewCategory | Out of Stock |
+    Then the response should contain "Updated1"
+    And the response should contain "NewCategory"
+    And the response should contain "Out of Stock"
+
+  # Implement other scenarios for Delete, List All, Search by Name, Search by Category, and Search by Availability
+
+# 7.features/steps/web_steps.py
+from behave import when, then, given
+from service.routes import app  # Import your app
+
+@when('I request to read product "{product_id}"')
+def request_read_product(context, product_id):
+    context.response = app.test_client().get(f'/products/{product_id}')
+
+@then('the response should contain "{text}"')
+def response_contains_text(context, text):
+    assert text.encode('utf-8') in context.response.data
+
+@given('I have the following products in the database')
+def load_products(context):
+    # Implement loading products into the database
+    pass
+
+@when('I update product "{product_id}" with the following data:')
+def update_product(context, product_id):
+    # Implement updating the product with the provided data
+    pass
+
+# Implement other step definitions for Delete, List All, Search by Name, Search by Category, and Search by Availability
+
+   
